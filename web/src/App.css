@@ -1,0 +1,10 @@
+.site-layout-content {
+  min-height: 600px;
+  padding: 24px;
+  background: #fff;
+}
+
+.header>h1 {
+  color: white;
+  margin: 0px;
+}
