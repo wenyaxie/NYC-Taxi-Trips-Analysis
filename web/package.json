@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@antv/g2plot": "^2.3.19",
     "@react-firebase/auth": "^0.2.10",
     "@testing-library/jest-dom": "^5.11.10",
     "@testing-library/react": "^11.2.6",
@@ -14,6 +15,7 @@
     "react-scripts": "4.0.3",
     "web-vitals": "^1.1.1"
   },
+  "proxy": "http://localhost:8080",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build"

@@ -1,15 +1,14 @@
-import google.oauth2.id_token
-from google.auth.transport import requests
-from flask import Flask, render_template, request
-import datetime
-from google.cloud import datastore
+from flask import Flask, jsonify, render_template, request
+from google.cloud import bigquery
+
+MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December']
 
 app = Flask(__name__,
             static_folder="web/build/static",
             template_folder="web/build")
 
-datastore_client = datastore.Client()
-firebase_request_adapter = requests.Request()
+bigquery_client = bigquery.Client()
 
 
 @app.route("/")
@@ -17,63 +16,178 @@ def root():
     return render_template('index.html')
 
 
-@app.route("/test")
-def test():
-    print()
-    # result = bigquery.read("sdf")
-    # return result
+@app.route("/trips-by-week")
+def summary_table():
+    year = request.args.get('year')
+    query = """
+    SELECT pickup_weekday as Week, COUNT(vendorID) as Trip_Number 
+    FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+    WHERE pickup_year = {}
+    GROUP BY pickup_weekday
+    ORDER BY (case when pickup_weekday = 'Monday' then '1' when pickup_weekday = 'Tuesday' then '2' when pickup_weekday = 'Wednesday' then '3'
+    when pickup_weekday = 'Thursday' then '4' when pickup_weekday = 'Friday' then '5' when pickup_weekday = 'Saturday' then '6'
+    when pickup_weekday = 'Sunday' then '7' end);
+    """.format(year)
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'week': row.get('Week'),
+            'trip_number': row.get('Trip_Number')
+        }
+        for row in rows
+    ])
 
 
-# @app.route('/')
-# def root():
-#     # Verify Firebase auth.
-#     id_token = request.cookies.get("token")
-#     error_message = None
-#     claims = None
-#     times = None
-
-#     if id_token:
-#         try:
-#             # Verify the token against the Firebase Auth API. This example
-#             # verifies the token on each page load. For improved performance,
-#             # some applications may wish to cache results in an encrypted
-#             # session store (see for instance
-#             # http://flask.pocoo.org/docs/1.0/quickstart/#sessions).
-#             claims = google.oauth2.id_token.verify_firebase_token(
-#                 id_token, firebase_request_adapter)
-#             print(claims)
-#         except ValueError as exc:
-#             # This will be raised if the token is expired or any other
-#             # verification checks fail.
-#             error_message = str(exc)
-
-#         # Record and fetch the recent times a logged-in user has accessed
-#         # the site. This is currently shared amongst all users, but will be
-#         # individualized in a following step.
-#         store_time(datetime.datetime.now())
-#         times = fetch_times(10)
-
-#     return render_template(
-#         'index.html',
-#         user_data=claims, error_message=error_message, times=times)
+@app.route("/trips-by-month")
+def summary_table_2():
+    year = request.args.get('year')
+    query = """
+    SELECT pickup_month as Month, COUNT(vendorID) as Trip_Number
+    FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+    WHERE pickup_year = {}
+    GROUP BY pickup_month
+    ORDER BY pickup_month;
+    """.format(year)
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'month': MONTHS[row.get('Month') - 1],
+            'trip_number': row.get('Trip_Number')
+        }
+        for row in rows
+    ])
 
 
-# def store_time(dt):
-#     entity = datastore.Entity(key=datastore_client.key('visit'))
-#     entity.update({
-#         'timestamp': dt
-#     })
+@app.route("/passenger-count")
+def summary_table_3():
+    year = request.args.get('year')
+    query = """
+    SELECT Count(1) AS Count_in_year, pickup_month AS Month,
+    CASE
+        WHEN passenger_count < 6 THEN 'Legal'
+        ELSE 'Illegal'
+    END
+    AS is_legal
+    FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+    WHERE pickup_year = {} AND passenger_count < 11
+    GROUP BY pickup_month, is_legal
+    ORDER BY pickup_month;  
+    """.format(year)
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'count': row.get('Count_in_year'),
+            'month': MONTHS[row.get('Month')-1],
+            'legal': row.get('is_legal')
+        }
+        for row in rows
+    ])
 
-#     datastore_client.put(entity)
+
+@app.route("/payment-type-trend")
+def payment_type_trend():
+    query = """
+        SELECT pickup_year, count( payment_type ) as number, payment_type FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T` 
+        WHERE payment_type = 'CSH' OR payment_type = 'CRD'
+        group by payment_type, pickup_year
+        ORDER BY pickup_year, payment_type;
+    """
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'year': row.get('pickup_year'),
+            'payment_type': row.get('payment_type'),
+            'num': row.get('number')
+        }
+        for row in rows
+    ])
 
 
-# def fetch_times(limit):
-#     query = datastore_client.query(kind='visit')
-#     query.order = ['-timestamp']
+@app.route("/change-of-tip-rates-from-2013-to-2020")
+def change_of_tip_rates():
+    query = """
+        SELECT ROUND(AVG(tip_rate), 2) AS Tip_Rate, pickup_year
+        FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+        WHERE pickup_year BETWEEN 2013 and 2020
+        GROUP BY pickup_year
+        ORDER BY pickup_year;
+    """
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'year': row.get('pickup_year'),
+            'tip_rate': row.get('Tip_Rate')
+        }
+        for row in rows
+    ])
 
-#     times = query.fetch(limit=limit)
 
-#     return times
+@app.route("/trips-impact-due-to-covid")
+def covid_impact():
+    query = """
+        SELECT COUNT(*) trips, pickup_year, pickup_month
+        FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+        WHERE pickup_year BETWEEN 2019 AND 2020
+        GROUP BY pickup_year, pickup_month
+        ORDER BY pickup_year, pickup_month;
+    """
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'year': str(row.get('pickup_year')),
+            'trips': row.get('trips'),
+            'month': MONTHS[row.get('pickup_month') - 1]
+        }
+        for row in rows
+    ])
+
+
+@app.route("/trips-relationship-with-covid-cases")
+def covid_impact_ii():
+    query = """
+        SELECT pickup_month as month ,COUNT(*) tripNum, IFNULL(confirmed_cases, 0) AS covid_confirmed_casesNum ,IFNULL(deaths_num, 0) AS covid_deathsNum
+        FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+        left Join
+            (SELECT extract(MONTH from date ) as pickup_month ,extract(YEAR from date) as pickup_year,max(confirmed_cases) as confirmed_cases, max(deaths) as deaths_num, 
+            FROM `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.covid19state_confirmed_cases`
+            where state_name = 'New York' and date <= '2020-12-31'
+            group by pickup_month,pickup_year ) using (pickup_month,pickup_year)
+
+        WHERE pickup_year = 2020
+        GROUP BY pickup_month,confirmed_cases,deaths_num
+        ORDER BY pickup_month;
+    """
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'month': MONTHS[row.get('month') - 1],
+            'tripcount':row.get('tripNum'),
+            'confirmed':row.get('covid_confirmed_casesNum'),
+            'death':row.get('covid_deathsNum')
+        }
+        for row in rows
+    ])
 
 
 if __name__ == '__main__':
