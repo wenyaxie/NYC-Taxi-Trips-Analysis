@@ -34,8 +34,6 @@ class TripsRelationshipWithCovid extends React.Component {
                     });
                 }
 
-                console.log(covidData);
-
                 this.setState({ loading: false });
                 const dualaxes = new DualAxes('trips-relationship-with-covid-cases', {
                     data: [tripData, covidData],
@@ -64,12 +62,6 @@ class TripsRelationshipWithCovid extends React.Component {
                             },
                         },
                     ],
-                    // animation: {
-                    //     appear: {
-                    //         animation: 'path-in',
-                    //         duration: 1000,
-                    //     }
-                    // }
                 });
                 dualaxes.render();
             });

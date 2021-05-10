@@ -93,6 +93,30 @@ def summary_table_3():
     ])
 
 
+@app.route("/yellow-taxi-overview")
+def yellow_taxi_overview():
+    query = """
+        SELECT
+        COUNT(*) trips, pickup_year
+        FROM
+        `sjsu-nyc-taxi-trips-analysis.yellowcab_taxi.2013-2020T`
+        WHERE pickup_year BETWEEN 2013 AND 2020
+        GROUP BY pickup_year
+        ORDER BY pickup_year; 
+    """
+    query_job = bigquery_client.query(query)
+    rows = []
+    for row in query_job.result():
+        rows.append(row)
+    return jsonify([
+        {
+            'year': row.get('pickup_year'),
+            'trips': row.get('trips')
+        }
+        for row in rows
+    ])
+
+
 @app.route("/payment-type-trend")
 def payment_type_trend():
     query = """
