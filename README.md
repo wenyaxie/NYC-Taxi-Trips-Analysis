@@ -1,5 +1,5 @@
 # About
-Web Application for NYC taxi trips analysis
+This is a web Application for NYC taxi trips analysis.
 
 # Deploy
 ```
