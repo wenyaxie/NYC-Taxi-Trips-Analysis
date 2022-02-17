@@ -1,3 +1,6 @@
+# About
+Web Application for NYC taxi trips analysis
+
 # Deploy
 ```
 npm install --prefix web
